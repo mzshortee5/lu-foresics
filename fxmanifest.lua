@@ -1,10 +1,10 @@
 fx_version 'cerulean'
 game 'gta5'
 
-name 'qb-analyzer-npc'
-author 'you'
-version '1.2.0'
-description 'NPC with qb-target to analyze player inventory (QB or OX inventory support, informational only, categorized menu)'
+name "LU-foresics"
+author "Eliza Lasal"
+version "25.8.21"
+description 'Informative Foresics Script'
 
 shared_scripts {
     '@qb-core/shared/locale.lua',
