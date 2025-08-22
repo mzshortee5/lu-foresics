@@ -1,25 +1,50 @@
+print("^2LU^7-^2foresics ^7v^41^7.^45 ^7- ^2foresics Script by ^1Eliza Lasal^7")
+
+-- If you need support I now have a discord available, it helps me keep track of issues and give better support.
+
+-- https://discord.gg/7jUCGyKXMT
+
 Config = {}
 
--- Choose which inventory system to use:
--- "auto" = detect automatically (prefers OX if started, otherwise QB)
--- "qb"   = force QBCore inventory
--- "ox"   = force OX Inventory
+-- Inventory system selection
+-- "auto" -> detect running resources (prefers OX if both and PreferOxWhenBoth=true)
+-- "qb"   -> force QBCore inventory
+-- "ox"   -> force OX Inventory
 Config.Inventory = {
-    System = "auto",              -- "auto" | "qb" | "ox"
-    PreferOxWhenBoth = true       -- if both are present and System="auto", prefer OX
+    System = "auto",
+    PreferOxWhenBoth = true
+}
+
+-- 🔒 Job lock for showing the qb-target option
+-- Map jobs to minimum grade required (number). If a job isn't listed, it's not allowed.
+Config.JobLock = {
+    Enabled = true,
+    Allowed = {
+        police    = 0,
+        -- add more jobs here with their required minimum grade
+    }
 }
 
 -- Analyzer NPCs
 Config.Peds = {
     {
         model = 's_m_y_cop_01',
-        coords = vec4(441.77, -981.92, 30.69, 90.0),
+        coords = vec4(466.368103, -994.516724, 26.092180, 272.677124),
         scenario = 'WORLD_HUMAN_CLIPBOARD'
     }
 }
 
+Config.Command = {
+    Enabled     = true,         -- toggle the /command
+    Name        = "analyzeinv", -- command name
+    Suggestion  = true,         -- chat suggestion
+    EmoteOnUse  = false          -- hold clipboard during command flow
+}
+
+
 -- Category-aware informational messages
--- category can be: "Drugs", "Ingredients", or "General"
+-- For Drugs, you can set enhancement booleans:
+--   speed = true/false, armor = true/false, health = true/false
 Config.ItemDescriptions = {
     -- General
     bandage = {
@@ -36,39 +61,27 @@ Config.ItemDescriptions = {
     },
 
     -- Ingredients
-    water = {
-        desc = "Bottle of water that quenches thirst.",
-        category = "Ingredients"
-    },
-    flour = {
-        desc = "Used for baking and cooking.",
-        category = "Ingredients"
-    },
-    sugar = {
-        desc = "Sweet ingredient for recipes.",
-        category = "Ingredients"
-    },
+     ["lead_nitride"] = { desc = "Illegal Chemical Ingredient", category = "Ingredients" },
+    
 
-    -- Drugs (examples — adjust to your server’s items)
-    weed = {
-        desc = "Cannabis plant, can be rolled into joints.",
-        category = "Drugs"
-    },
-    coke = {
-        desc = "Cocaine powder.",
-        category = "Drugs"
-    },
-    meth = {
-        desc = "Crystalline stimulant.",
-        category = "Drugs"
+    -- Drugs (examples — set any of speed/armor/health to true/false)
+    drug_2step = {
+            desc     = "Illegal Synthetic Stimulant",
+            category = "Drugs",
+            speed    = true,
+            armor    = true,
+            health   = false
+        },   
     }
-}
+        
+
 
 -- UI text
-Config.MenuTitle = "🔍 Inventory Analyzer"
+Config.MenuTitle  = "🔍 Inventory Analyzer"
 Config.CloseLabel = "⬅ Close"
 
 Config.Notify = {
     Empty = "Your inventory is empty.",
-    Fetch = "Contacting analyzer..."
+    Fetch = "Contacting analyzer...",
+    NoAuth = "You are not authorized to use this."
 }
