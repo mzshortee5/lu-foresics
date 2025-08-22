@@ -2,7 +2,7 @@ print("^2LU^7-^2foresics ^7v^41^7.^45 ^7- ^2foresics Script by ^1Eliza Lasal^7")
 
 -- If you need support I now have a discord available, it helps me keep track of issues and give better support.
 
--- https://discord.gg/7jUCGyKXMT
+-- https://discord.gg/cqtggDqnW6
 
 Config = {}
 
