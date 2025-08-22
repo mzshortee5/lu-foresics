@@ -1,6 +1,8 @@
 # lu-foresics
 QB CORE | Check items in inventory and provide the information to the player
 
+Works with Ox and Qb Inventory
+
 
 This is Job Locked for PD Only -- Customizable 
 
