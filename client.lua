@@ -1,13 +1,64 @@
 local QBCore = exports['qb-core']:GetCoreObject()
 local spawnedPeds = {}
 
--- Helpers
+-- Cache player data for quick checks
+local PlayerData = {}
+
+RegisterNetEvent('QBCore:Client:OnPlayerLoaded', function()
+    PlayerData = QBCore.Functions.GetPlayerData()
+end)
+
+RegisterNetEvent('QBCore:Client:OnPlayerUnload', function()
+    PlayerData = {}
+end)
+
+RegisterNetEvent('QBCore:Player:SetPlayerData', function(val)
+    PlayerData = val
+end)
+
+-- Emote helpers (used when command invokes the analyzer)
+local Analyzer_EmoteActive = false
+
+local function StartClipboardEmote()
+    if Config.Command and Config.Command.EmoteOnUse == false then return end
+    local ped = PlayerPedId()
+    if IsPedInAnyVehicle(ped, false) then return end
+    TaskStartScenarioInPlace(ped, "WORLD_HUMAN_CLIPBOARD", 0, true)
+    Analyzer_EmoteActive = true
+end
+
+local function StopClipboardEmote()
+    if Analyzer_EmoteActive then
+        ClearPedTasks(PlayerPedId())
+        Analyzer_EmoteActive = false
+    end
+end
+
+CreateThread(function()
+    if Config.Command and Config.Command.Enabled and Config.Command.Suggestion ~= false then
+        local cmd = (Config.Command.Name or "analyzeinv")
+        TriggerEvent("chat:addSuggestion", "/"..cmd, "Open the Inventory Analyzer")
+    end
+end)
+
 local function loadModel(model)
     local hash = joaat(model)
     if not IsModelInCdimage(hash) then return nil end
     RequestModel(hash)
     while not HasModelLoaded(hash) do Wait(0) end
     return hash
+end
+
+-- 🔒 Job check helper
+local function isJobAllowed()
+    if not Config.JobLock or not Config.JobLock.Enabled then return true end
+    local pdata = PlayerData and PlayerData.job and PlayerData or QBCore.Functions.GetPlayerData()
+    if not pdata or not pdata.job then return false end
+    local jname = pdata.job.name
+    local jgrade = (pdata.job.grade and (pdata.job.grade.level or pdata.job.grade)) or 0
+    local min = Config.JobLock.Allowed[jname]
+    if min == nil then return false end
+    return jgrade >= min
 end
 
 -- Spawn analyzer NPC(s)
@@ -31,8 +82,11 @@ CreateThread(function()
                 {
                     type = "client",
                     event = "analyzer:client:open",
-                    icon = "fas fa-search",
-                    label = "Analyze Inventory"
+                    icon  = "fas fa-search",
+                    label = "Analyze Inventory",
+                    canInteract = function(entity, distance, data)
+                        return isJobAllowed()
+                    end
                 }
             },
             distance = 2.0
@@ -44,7 +98,7 @@ CreateThread(function()
     end
 end)
 
--- Cleanup spawned NPCs on resource stop
+-- Cleanup on stop
 AddEventHandler('onResourceStop', function(res)
     if res ~= GetCurrentResourceName() then return end
     for _, ped in ipairs(spawnedPeds) do
@@ -52,20 +106,38 @@ AddEventHandler('onResourceStop', function(res)
     end
 end)
 
--- Open → fetch inventory (strictly informational)
-RegisterNetEvent("analyzer:client:open", function()
+-- Open → fetch inventory (respect job lock)
+RegisterNetEvent("analyzer:client:open", function(data)
+    -- Job lock (client side)
+    local function unauthorized()
+        QBCore.Functions.Notify(Config.Notify.NoAuth or "You are not authorized to use this.", "error", 3500)
+        StopClipboardEmote()
+    end
+    if Config.JobLock and Config.JobLock.Enabled then
+        local pdata = QBCore.Functions.GetPlayerData()
+        local name  = pdata.job and pdata.job.name
+        local grade = pdata.job and ((pdata.job.grade and (pdata.job.grade.level or pdata.job.grade)) or 0) or 0
+        local min   = name and Config.JobLock.Allowed[name]
+        if not (min ~= nil and grade >= min) then return unauthorized() end
+    end
+
+    -- Start clipboard emote only if the command passed the flag
+    if data and data.withEmote then
+        StartClipboardEmote()
+    end
+
     QBCore.Functions.Notify(Config.Notify.Fetch or "Contacting analyzer...", "primary", 1200)
     TriggerServerEvent("analyzer:server:getInventory")
 end)
 
--- Build categorized menu using qb-menu
+-- Build categorized QB-Menu
 RegisterNetEvent("analyzer:client:showMenu", function(itemList)
     if not itemList or next(itemList) == nil then
         QBCore.Functions.Notify(Config.Notify.Empty or "Your inventory is empty.", "error", 3500)
+        StopClipboardEmote()
         return
     end
 
-    -- Categorize items based on Config.ItemDescriptions
     local categorized = { Drugs = {}, Ingredients = {}, General = {} }
 
     for _, item in ipairs(itemList) do
@@ -75,13 +147,11 @@ RegisterNetEvent("analyzer:client:showMenu", function(itemList)
         table.insert(categorized[cat], item)
     end
 
-    -- Sort each category by label asc
     local function sortByLabel(t)
         table.sort(t, function(a, b) return (a.label or a.name) < (b.label or b.name) end)
     end
     for _, t in pairs(categorized) do sortByLabel(t) end
 
-    -- Build qb-menu
     local menu = {
         { header = Config.MenuTitle or "🔍 Inventory Analyzer", isMenuHeader = true }
     }
@@ -95,30 +165,53 @@ RegisterNetEvent("analyzer:client:showMenu", function(itemList)
                     txt = "Select to view info",
                     params = {
                         event = "analyzer:client:analyzeItem",
-                        args = { name = item.name, label = item.label }
+                        args  = { name = item.name, label = item.label }
                     }
                 }
             end
         end
     end
 
-    -- Order: Drugs → Ingredients → General
     addCategory("Drugs", categorized.Drugs)
     addCategory("Ingredients", categorized.Ingredients)
     addCategory("General", categorized.General)
 
-    menu[#menu+1] = { header = Config.CloseLabel or "⬅ Close", params = { event = "qb-menu:closeMenu" } }
+    menu[#menu+1] = {
+        header = Config.CloseLabel or "⬅ Close",
+        params = { event = "analyzer:client:closeMenu" }
+    }
     exports['qb-menu']:openMenu(menu)
 end)
 
--- On item selection → show info via qb-notify (strictly informational)
+RegisterNetEvent("analyzer:client:closeMenu", function()
+    StopClipboardEmote()
+    exports['qb-menu']:closeMenu()
+end)
+
+-- On selection → qb-notify with enhancements flags (informational only)
 RegisterNetEvent("analyzer:client:analyzeItem", function(data)
     local name  = data.name
     local label = data.label or name
     local info  = Config.ItemDescriptions[name]
 
     if info and info.desc then
-        QBCore.Functions.Notify(("%s: %s"):format(label, info.desc), "success", 6000)
+        local msg = ("%s: %s"):format(label, info.desc)
+
+        -- If it's a Drug category, append enhancement flags
+        if (info.category == "Drugs") then
+            local effects = {}
+            if info.speed  then effects[#effects+1] = "Speed"  end
+            if info.armor  then effects[#effects+1] = "Armor"  end
+            if info.health then effects[#effects+1] = "Health" end
+
+            if #effects > 0 then
+                msg = msg .. " | Enhancements: " .. table.concat(effects, ", ")
+            else
+                msg = msg .. " | Enhancements: none"
+            end
+        end
+
+        QBCore.Functions.Notify(msg, "success", 8000)
     else
         QBCore.Functions.Notify(("No analysis data available for %s."):format(label), "error", 4500)
     end
